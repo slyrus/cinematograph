@@ -104,40 +104,96 @@
          film_set_decoration_by traileraddict_id gross_revenue
          fandango_id)))
 
-(def film-graph (graph/make-graph))
+(let [graph (graph/make-graph)]
 
-(let [[actor-graph actor-id-map actor-name-map]
-      (with-open [r (io/reader
-                     (java.util.zip.GZIPInputStream.
-                      (.getResourceAsStream (clojure.lang.RT/baseLoader)
-                                            *actor-file*)))]
-        (doall
-         (reduce (fn [[graph-db actor-id-map actor-name-map] actor-args]
-                   (let [actor (apply make-actor actor-args)]
-                     [(add-node graph-db actor)
-                      (conj actor-id-map {(:id actor) actor})
-                      (conj actor-name-map {(:name actor) actor})]))
-                 [(graph/make-graph) {} {}]
-                 (lazy-seq (map #(c.c.str-utils/re-split #"\t" %)
-                                (drop 1 (line-seq r)))))))]
-  (def *actor-graph* actor-graph)
-  (def *actor-id-map* actor-id-map)
-  (def *actor-name-map* actor-name-map))
+  (let [[graph actor-id-map actor-name-map]
+        (with-open [r (io/reader
+                       (java.util.zip.GZIPInputStream.
+                        (.getResourceAsStream (clojure.lang.RT/baseLoader)
+                                              *actor-file*)))]
+          (doall
+           (reduce (fn [[graph-db actor-id-map actor-name-map] actor-args]
+                     (let [actor (apply make-actor actor-args)]
+                       (if (or (= (:id actor) "")
+                               (= (:name actor) ""))
+                         [graph-db actor-id-map actor-name-map]
+                         [(add-node graph-db actor)
+                          (conj actor-id-map {(:id actor) actor})
+                          (conj actor-name-map {(:name actor) actor})])))
+                   [graph {} {}]
+                   (lazy-seq (map #(c.c.str-utils/re-split #"\t" %)
+                                  (drop 1 (line-seq r)))))))]
+    (def *actor-id-map* actor-id-map)
+    (def *actor-name-map* actor-name-map)
 
-(let [[film-graph film-id-map film-name-map]
-      (with-open [r (io/reader
-                     (java.util.zip.GZIPInputStream.
-                      (.getResourceAsStream (clojure.lang.RT/baseLoader)
-                                            *film-file*)))]
-        (doall
-         (reduce (fn [[graph-db film-id-map film-name-map] film-args]
-                   (let [film (apply make-film film-args)]
-                     [(add-node graph-db film)
-                      (conj film-id-map {(:id film) film})
-                      (conj film-name-map {(:name film) film})]))
-                 [(graph/make-graph) {} {}]
-                 (map #(c.c.str-utils/re-split #"\t" %)
-                      (drop 1 (line-seq r))))))]
-  (def *film-graph* film-graph)
-  (def *film-id-map* film-id-map)
-  (def *film-name-map* film-name-map))
+    (let [[graph film-id-map film-name-map]
+          (with-open [r (io/reader
+                         (java.util.zip.GZIPInputStream.
+                          (.getResourceAsStream (clojure.lang.RT/baseLoader)
+                                                *film-file*)))]
+            (doall
+             (reduce (fn [[graph-db film-id-map film-name-map] film-args]
+                       (let [film (apply make-film film-args)]
+                         (if (or (= (:id film) "")
+                                 (= (:name film) ""))
+                           [graph-db film-id-map film-name-map]
+                           [(add-node graph-db film)
+                            (conj film-id-map {(:id film) film})
+                            (conj film-name-map {(:name film) film})])))
+                     [graph {} {}]
+                     (map #(c.c.str-utils/re-split #"\t" %)
+                          (drop 1 (line-seq r))))))]
+      (def *film-id-map* film-id-map)
+      (def *film-name-map* film-name-map)
+      
+      (def *graph* graph))))
+
+;;;
+;;; Ok, so it would be nice if the actors had the guids of the movies
+;;; in which they starred, but unfortunately it seems that they have
+;;; the guid of an entity that corresponds to the fact that so-and-so
+;;; starred in such-and-such movie. So we have to map from actor ->
+;;; film-gid == starring-gid <- film. So, it can be done, we just have
+;;; more work to do.
+(def *actor-film-guid-map*
+     (reduce
+      (fn [m actor]
+        (into m (let [v (val actor)
+                      actor-guid (:id v)
+                      actor-film-guids (:film v)]
+                  (reduce (fn [m guid]
+                            (assoc m guid actor-guid))
+                          {}
+                          actor-film-guids))))
+      {}
+      *actor-id-map*))
+
+(def *film-starring-guid-map*
+     (reduce
+      (fn [m film]
+        (into m (let [v (val film)
+                      film-guid (:id v)
+                      film-star-guids (:starring v)]
+                  (reduce (fn [m guid]
+                            (assoc m guid film-guid))
+                          {} film-star-guids))))
+      {}
+      *film-id-map*))
+
+(def *actor-film-graph*
+     (reduce (fn [g [guid actor-guid]]
+               (let [actor (get *actor-id-map* actor-guid)
+                     film (get *film-id-map*
+                               (get *film-starring-guid-map* guid))]
+                 (if (and actor film)
+                   (add-edge (add-node (add-node g actor) film) actor film)
+                   g)))
+             (graph/make-graph)
+             *actor-film-guid-map*))
+
+(defn get-actor-node [name]
+  (graph/get-node *actor-film-graph* (get *actor-name-map* name)))
+
+(defn get-film-node [name]
+  (graph/get-node *actor-film-graph* (get *film-name-map* name)))
+
