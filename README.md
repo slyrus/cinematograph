@@ -17,3 +17,22 @@ http://www.freebase.com/view/film/film
 
 However, gzipped copies of a snapshot of the data are in the .git repo.
 
+For some examples of what cinematograph can do, check out
+test/cinematograph_test.clj.
+
+For example:
+
+    cinematograph-test> (map :name (graph/find-node *actor-film-graph*
+                     (get-actor-node "Aishwarya Rai")
+                     (get-actor-node "Naomi Watts")))
+    ("Naomi Watts" "Plots with a View" "Alfred Molina" "The Pink Panther 2" "Aishwarya Rai")
+
+or:
+
+    cinematograph-test> (map :name (graph/find-node *actor-film-graph*
+                                (get-film-node "Dazed and Confused")
+                                (get-film-node "Fast Times at Ridgemont High")))
+    ("Fast Times at Ridgemont High" "Anthony Edwards" "Zodiac" "Adam Goldberg" "Dazed and Confused")
+
+Feel free to contact me with complaints or suggestions at ch-lisp at bobobeach.com.
+
