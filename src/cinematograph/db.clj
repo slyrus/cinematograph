@@ -110,7 +110,7 @@
                        (if (or (= (:id actor) "")
                                (= (:name actor) ""))
                          [graph-db actor-id-map actor-name-map]
-                         [(add-node graph-db actor)
+                         [(graph/add-node graph-db actor)
                           (conj actor-id-map {(:id actor) actor})
                           (conj actor-name-map {(:name actor) actor})])))
                    [graph {} {}]
@@ -130,7 +130,7 @@
                          (if (or (= (:id film) "")
                                  (= (:name film) ""))
                            [graph-db film-id-map film-name-map]
-                           [(add-node graph-db film)
+                           [(graph/add-node graph-db film)
                             (conj film-id-map {(:id film) film})
                             (conj film-name-map {(:name film) film})])))
                      [graph {} {}]
@@ -179,7 +179,7 @@
                      film (get *film-id-map*
                                (get *film-starring-guid-map* guid))]
                  (if (and actor film)
-                   (add-edge (add-node (add-node g actor) film) actor film)
+                   (graph/add-edge (graph/add-node (graph/add-node g actor) film) actor film)
                    g)))
              (graph/make-graph)
              *actor-film-guid-map*))
